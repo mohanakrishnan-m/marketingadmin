@@ -16,7 +16,7 @@ const COLORS = [
   'from-orange-500 to-amber-500',
 ];
 
-export default function ViewTemplatesPage({ templates, setTemplates, onNavigate, addToast }) {
+export default function ViewTemplatesPage({ templates, deleteTemplate, onNavigate, addToast }) {
   const [search, setSearch] = useState('');
   const [preview, setPreview] = useState(null);
   const [deleteId, setDeleteId] = useState(null);
@@ -27,10 +27,14 @@ export default function ViewTemplatesPage({ templates, setTemplates, onNavigate,
       t.subject.toLowerCase().includes(search.toLowerCase())
   );
 
-  const doDelete = () => {
-    setTemplates((prev) => prev.filter((t) => t.id !== deleteId));
-    addToast('Template deleted', 'success');
-    setDeleteId(null);
+  const doDelete = async () => {
+    try {
+      await deleteTemplate(deleteId);
+      addToast('Template deleted', 'success');
+      setDeleteId(null);
+    } catch (error) {
+      addToast(error.message || 'Unable to delete template.', 'error');
+    }
   };
 
   return (

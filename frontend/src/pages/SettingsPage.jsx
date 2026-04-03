@@ -1,9 +1,8 @@
-import { useState } from 'react';
-import { Settings, User, Bell, Mail, Shield, Save, Check } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { Settings, User, Bell, Shield, Save, Check } from 'lucide-react';
 
 const TABS = [
   { id: 'profile', label: 'Profile', icon: User },
-  { id: 'email', label: 'Email Config', icon: Mail },
   { id: 'notifications', label: 'Notifications', icon: Bell },
   { id: 'security', label: 'Security', icon: Shield },
 ];
@@ -35,68 +34,80 @@ function ToggleSwitch({ checked, onChange, label, desc }) {
   );
 }
 
-export default function SettingsPage({ addToast }) {
-  const [activeTab, setActiveTab] = useState('profile');
-  const [saving, setSaving] = useState(false);
-  const [saved, setSaved] = useState(false);
-
-  const [profile, setProfile] = useState({
-    name: 'Admin User',
-    email: 'admin@iceberg.io',
-    company: 'Iceberg Marketing',
-    phone: '+91 98200 00000',
-    timezone: 'Asia/Kolkata',
-  });
-
-  const [emailConfig, setEmailConfig] = useState({
-    senderName: 'Iceberg Marketing',
-    senderEmail: 'noreply@iceberg.io',
-    replyTo: 'support@iceberg.io',
-    smtpHost: 'smtp.iceberg.io',
-    smtpPort: '587',
-    footerText: 'Iceberg Marketing Portal 2026. All rights reserved.',
-  });
-
-  const [notifs, setNotifs] = useState({
-    campaignSent: true,
-    clientAdded: true,
-    openRateAlert: false,
-    weeklyReport: true,
-    systemAlerts: true,
-  });
-
-  const [security, setSecurity] = useState({
-    twoFactor: false,
-    sessionTimeout: '60',
-    loginAlerts: true,
-  });
-  const [passwords, setPasswords] = useState({
-    current: '',
-    next: '',
-    confirm: '',
-  });
-
-  const handleSave = () => {
-    setSaving(true);
-    setTimeout(() => {
-      setSaving(false);
-      setSaved(true);
-      addToast('Settings saved successfully', 'success');
-      setTimeout(() => setSaved(false), 2000);
-    }, 600);
-  };
-
-  const InputField = ({ label, value, onChange, type = 'text', span = 1 }) => (
+function InputField({
+  label,
+  value,
+  onChange,
+  type = 'text',
+  span = 1,
+  placeholder = '',
+}) {
+  return (
     <div className={span === 2 ? 'sm:col-span-2' : ''}>
       <label className="block text-[12px] font-semibold uppercase tracking-[0.12em] text-slate-500">{label}</label>
       <input
         type={type}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
+        value={value ?? ''}
+        onChange={(event) => onChange(event.target.value)}
+        placeholder={placeholder}
         className="mt-2 w-full rounded-2xl border border-slate-200/80 bg-white/90 px-4 py-3.5 text-[14px] text-slate-700"
       />
     </div>
   );
+}
+
+export default function SettingsPage({ settings, saveSettings, addToast }) {
+  const [activeTab, setActiveTab] = useState('profile');
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [profile, setProfile] = useState(settings.profile);
+  const [notifs, setNotifs] = useState(settings.notifs);
+  const [security, setSecurity] = useState(settings.security);
+  const [passwords, setPasswords] = useState({ current: '', next: '', confirm: '' });
+
+  useEffect(() => {
+    setProfile(settings.profile);
+    setNotifs(settings.notifs);
+    setSecurity(settings.security);
+  }, [settings]);
+
+  const handleSave = async () => {
+    if (passwords.current || passwords.next || passwords.confirm) {
+      if (!passwords.current) {
+        addToast('Current password is required to change your password.', 'error');
+        return;
+      }
+
+      if (passwords.next !== passwords.confirm) {
+        addToast('New passwords do not match.', 'error');
+        return;
+      }
+    }
+
+    setSaving(true);
+
+    try {
+      await saveSettings({
+        profile,
+        notifs,
+        security: {
+          ...security,
+          sessionTimeout: Number(security.sessionTimeout),
+          currentPassword: passwords.current || undefined,
+          newPassword: passwords.next || undefined,
+        },
+      });
+
+      setPasswords({ current: '', next: '', confirm: '' });
+      setSaved(true);
+      addToast('Settings saved successfully', 'success');
+      setTimeout(() => setSaved(false), 2000);
+    } catch (error) {
+      addToast(error.message || 'Unable to save settings.', 'error');
+    } finally {
+      setSaving(false);
+    }
+  };
 
   return (
     <div className="space-y-5">
@@ -109,7 +120,7 @@ export default function SettingsPage({ addToast }) {
             <div>
               <h2 className="text-[22px] font-semibold tracking-[-0.03em] leading-tight text-slate-900 sm:text-[28px]">Portal settings</h2>
               <p className="hidden pt-2 text-[14px] leading-6 text-slate-500 sm:block">
-                Configure sender identity, campaign notifications, and access controls for the marketing workspace.
+                Update your profile, notifications, and account security for the marketing workspace.
               </p>
             </div>
           </div>
@@ -121,6 +132,7 @@ export default function SettingsPage({ addToast }) {
           {TABS.map(({ id, label, icon: Icon }) => (
             <button
               key={id}
+              type="button"
               onClick={() => setActiveTab(id)}
               className={`flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-left ${
                 activeTab === id ? 'bg-indigo-600 text-white' : 'text-slate-600 hover:bg-white/70'
@@ -137,56 +149,35 @@ export default function SettingsPage({ addToast }) {
             <>
               <div className="border-b border-slate-100 px-5 py-4">
                 <p className="text-[16px] font-semibold text-slate-900">Profile settings</p>
-                <p className="text-[12px] text-slate-500">Update the owner details shown across the portal and campaign footer.</p>
+                <p className="text-[12px] text-slate-500">Update the owner details shown across the portal.</p>
               </div>
               <div className="grid gap-5 p-5 sm:grid-cols-2 sm:p-6">
-                <div className="sm:col-span-2 flex items-center gap-4 rounded-[26px] border border-slate-200/80 bg-white/85 p-4">
-                  <div className="flex h-14 w-14 items-center justify-center rounded-[20px] bg-gradient-to-br from-indigo-500 to-violet-500 text-[18px] font-semibold text-white">A</div>
+                <div className="flex items-center gap-4 rounded-[26px] border border-slate-200/80 bg-white/85 p-4 sm:col-span-2">
+                  <div className="flex h-14 w-14 items-center justify-center rounded-[20px] bg-gradient-to-br from-indigo-500 to-violet-500 text-[18px] font-semibold text-white">
+                    {(profile.name?.[0] || 'A').toUpperCase()}
+                  </div>
                   <div>
                     <p className="text-[15px] font-semibold text-slate-900">{profile.name}</p>
                     <p className="text-[12px] text-slate-500">{profile.email}</p>
                   </div>
                 </div>
-                <InputField label="Full Name" value={profile.name} onChange={(v) => setProfile((p) => ({ ...p, name: v }))} />
-                <InputField label="Email Address" value={profile.email} onChange={(v) => setProfile((p) => ({ ...p, email: v }))} type="email" />
-                <InputField label="Company Name" value={profile.company} onChange={(v) => setProfile((p) => ({ ...p, company: v }))} />
-                <InputField label="Phone Number" value={profile.phone} onChange={(v) => setProfile((p) => ({ ...p, phone: v }))} />
+
+                <InputField label="Full Name" value={profile.name} onChange={(value) => setProfile((prev) => ({ ...prev, name: value }))} />
+                <InputField label="Email Address" value={profile.email} onChange={(value) => setProfile((prev) => ({ ...prev, email: value }))} type="email" />
+                <InputField label="Company Name" value={profile.company} onChange={(value) => setProfile((prev) => ({ ...prev, company: value }))} />
+                <InputField label="Phone Number" value={profile.phone} onChange={(value) => setProfile((prev) => ({ ...prev, phone: value }))} />
+
                 <div className="sm:col-span-2">
                   <label className="block text-[12px] font-semibold uppercase tracking-[0.12em] text-slate-500">Timezone</label>
                   <select
                     value={profile.timezone}
-                    onChange={(e) => setProfile((p) => ({ ...p, timezone: e.target.value }))}
+                    onChange={(event) => setProfile((prev) => ({ ...prev, timezone: event.target.value }))}
                     className="mt-2 w-full rounded-2xl border border-slate-200/80 bg-white/90 px-4 py-3.5 text-[14px] text-slate-700"
                   >
-                    {['Asia/Kolkata', 'America/New_York', 'Europe/London', 'Asia/Tokyo', 'Australia/Sydney'].map((tz) => (
-                      <option key={tz} value={tz}>{tz}</option>
+                    {['Asia/Kolkata', 'America/New_York', 'Europe/London', 'Asia/Tokyo', 'Australia/Sydney'].map((timezone) => (
+                      <option key={timezone} value={timezone}>{timezone}</option>
                     ))}
                   </select>
-                </div>
-              </div>
-            </>
-          )}
-
-          {activeTab === 'email' && (
-            <>
-              <div className="border-b border-slate-100 px-5 py-4">
-                <p className="text-[16px] font-semibold text-slate-900">Email configuration</p>
-                <p className="text-[12px] text-slate-500">Control sender identity, reply routing, and SMTP setup.</p>
-              </div>
-              <div className="grid gap-5 p-5 sm:grid-cols-2 sm:p-6">
-                <InputField label="Sender Name" value={emailConfig.senderName} onChange={(v) => setEmailConfig((e) => ({ ...e, senderName: v }))} />
-                <InputField label="Sender Email" value={emailConfig.senderEmail} onChange={(v) => setEmailConfig((e) => ({ ...e, senderEmail: v }))} />
-                <InputField label="Reply-To Email" value={emailConfig.replyTo} onChange={(v) => setEmailConfig((e) => ({ ...e, replyTo: v }))} />
-                <InputField label="SMTP Host" value={emailConfig.smtpHost} onChange={(v) => setEmailConfig((e) => ({ ...e, smtpHost: v }))} />
-                <InputField label="SMTP Port" value={emailConfig.smtpPort} onChange={(v) => setEmailConfig((e) => ({ ...e, smtpPort: v }))} />
-                <div className="sm:col-span-2">
-                  <label className="block text-[12px] font-semibold uppercase tracking-[0.12em] text-slate-500">Footer Text</label>
-                  <textarea
-                    value={emailConfig.footerText}
-                    onChange={(e) => setEmailConfig((cfg) => ({ ...cfg, footerText: e.target.value }))}
-                    rows={3}
-                    className="mt-2 w-full rounded-2xl border border-slate-200/80 bg-white/90 px-4 py-3.5 text-[14px] text-slate-700"
-                  />
                 </div>
               </div>
             </>
@@ -195,15 +186,40 @@ export default function SettingsPage({ addToast }) {
           {activeTab === 'notifications' && (
             <>
               <div className="border-b border-slate-100 px-5 py-4">
-                <p className="text-[16px] font-semibold text-slate-900">Notification preferences</p>
-                <p className="text-[12px] text-slate-500">Choose which campaign and system events should trigger alerts.</p>
+                <p className="text-[16px] font-semibold text-slate-900">Notifications</p>
+                <p className="text-[12px] text-slate-500">Choose which updates should trigger alerts inside the workspace.</p>
               </div>
               <div className="p-5 sm:p-6">
-                <ToggleSwitch checked={notifs.campaignSent} onChange={(v) => setNotifs((n) => ({ ...n, campaignSent: v }))} label="Campaign sent" desc="Notify when a delivery run finishes successfully." />
-                <ToggleSwitch checked={notifs.clientAdded} onChange={(v) => setNotifs((n) => ({ ...n, clientAdded: v }))} label="New client added" desc="Alert the team when a new business is added to the portal." />
-                <ToggleSwitch checked={notifs.openRateAlert} onChange={(v) => setNotifs((n) => ({ ...n, openRateAlert: v }))} label="Low open rate alert" desc="Send a notification when opens drop under the expected campaign target." />
-                <ToggleSwitch checked={notifs.weeklyReport} onChange={(v) => setNotifs((n) => ({ ...n, weeklyReport: v }))} label="Weekly report" desc="Receive the weekly summary for send volume and audience response." />
-                <ToggleSwitch checked={notifs.systemAlerts} onChange={(v) => setNotifs((n) => ({ ...n, systemAlerts: v }))} label="System alerts" desc="Get access, delivery, and security system notices." />
+                <ToggleSwitch
+                  checked={notifs.campaignSent}
+                  onChange={(value) => setNotifs((prev) => ({ ...prev, campaignSent: value }))}
+                  label="Campaign sent confirmation"
+                  desc="Show a confirmation when a campaign has been processed."
+                />
+                <ToggleSwitch
+                  checked={notifs.clientAdded}
+                  onChange={(value) => setNotifs((prev) => ({ ...prev, clientAdded: value }))}
+                  label="New client alerts"
+                  desc="Notify when a client is added or updated."
+                />
+                <ToggleSwitch
+                  checked={notifs.openRateAlert}
+                  onChange={(value) => setNotifs((prev) => ({ ...prev, openRateAlert: value }))}
+                  label="Open-rate alerts"
+                  desc="Highlight campaigns with unusually high or low engagement."
+                />
+                <ToggleSwitch
+                  checked={notifs.weeklyReport}
+                  onChange={(value) => setNotifs((prev) => ({ ...prev, weeklyReport: value }))}
+                  label="Weekly summary"
+                  desc="Enable the weekly marketing performance digest."
+                />
+                <ToggleSwitch
+                  checked={notifs.systemAlerts}
+                  onChange={(value) => setNotifs((prev) => ({ ...prev, systemAlerts: value }))}
+                  label="System alerts"
+                  desc="Receive warnings about account or delivery issues."
+                />
               </div>
             </>
           )}
@@ -211,55 +227,82 @@ export default function SettingsPage({ addToast }) {
           {activeTab === 'security' && (
             <>
               <div className="border-b border-slate-100 px-5 py-4">
-                <p className="text-[16px] font-semibold text-slate-900">Security controls</p>
-                <p className="text-[12px] text-slate-500">Protect account access and define sign-in session rules.</p>
+                <p className="text-[16px] font-semibold text-slate-900">Security</p>
+                <p className="text-[12px] text-slate-500">Manage account protection and session behavior.</p>
               </div>
-              <div className="space-y-5 p-5 sm:p-6">
-                <div className="rounded-[26px] border border-slate-200/80 bg-white/85 px-5 py-2">
-                  <ToggleSwitch checked={security.twoFactor} onChange={(v) => setSecurity((s) => ({ ...s, twoFactor: v }))} label="Two-factor authentication" desc="Require an extra verification step when signing in." />
-                  <ToggleSwitch checked={security.loginAlerts} onChange={(v) => setSecurity((s) => ({ ...s, loginAlerts: v }))} label="Login alerts" desc="Notify this account when a new session starts." />
-                </div>
-                <div>
-                  <label className="block text-[12px] font-semibold uppercase tracking-[0.12em] text-slate-500">Session Timeout</label>
-                  <select
-                    value={security.sessionTimeout}
-                    onChange={(e) => setSecurity((s) => ({ ...s, sessionTimeout: e.target.value }))}
-                    className="mt-2 w-full rounded-2xl border border-slate-200/80 bg-white/90 px-4 py-3.5 text-[14px] text-slate-700"
-                  >
-                    {['15', '30', '60', '120', '240'].map((v) => (
-                      <option key={v} value={v}>{v} minutes</option>
-                    ))}
-                  </select>
-                </div>
+              <div className="space-y-6 p-5 sm:p-6">
                 <div className="rounded-[26px] border border-slate-200/80 bg-white/85 p-5">
-                  <p className="text-[14px] font-semibold text-slate-900">Password update</p>
-                  <div className="mt-4 grid gap-4 sm:grid-cols-2">
-                    <InputField label="Current Password" value={passwords.current} onChange={(v) => setPasswords((p) => ({ ...p, current: v }))} type="password" />
-                    <InputField label="New Password" value={passwords.next} onChange={(v) => setPasswords((p) => ({ ...p, next: v }))} type="password" />
-                    <InputField label="Confirm Password" value={passwords.confirm} onChange={(v) => setPasswords((p) => ({ ...p, confirm: v }))} type="password" span={2} />
+                  <ToggleSwitch
+                    checked={security.twoFactor}
+                    onChange={(value) => setSecurity((prev) => ({ ...prev, twoFactor: value }))}
+                    label="Two-factor authentication"
+                    desc="Require an additional verification step during sign-in."
+                  />
+                  <ToggleSwitch
+                    checked={security.loginAlerts}
+                    onChange={(value) => setSecurity((prev) => ({ ...prev, loginAlerts: value }))}
+                    label="Login alerts"
+                    desc="Notify when your account signs in from a new session."
+                  />
+                </div>
+
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div>
+                    <label className="block text-[12px] font-semibold uppercase tracking-[0.12em] text-slate-500">Session Timeout</label>
+                    <select
+                      value={String(security.sessionTimeout)}
+                      onChange={(event) => setSecurity((prev) => ({ ...prev, sessionTimeout: event.target.value }))}
+                      className="mt-2 w-full rounded-2xl border border-slate-200/80 bg-white/90 px-4 py-3.5 text-[14px] text-slate-700"
+                    >
+                      <option value="15">15 minutes</option>
+                      <option value="30">30 minutes</option>
+                      <option value="60">60 minutes</option>
+                      <option value="120">120 minutes</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="rounded-[26px] border border-slate-200/80 bg-white/85 p-5">
+                  <p className="text-[14px] font-semibold text-slate-900">Change password</p>
+                  <p className="pt-1 text-[12px] text-slate-500">Leave these fields empty if you do not want to change your password.</p>
+                  <div className="grid gap-4 pt-4 sm:grid-cols-2">
+                    <InputField
+                      label="Current Password"
+                      value={passwords.current}
+                      onChange={(value) => setPasswords((prev) => ({ ...prev, current: value }))}
+                      type="password"
+                    />
+                    <div />
+                    <InputField
+                      label="New Password"
+                      value={passwords.next}
+                      onChange={(value) => setPasswords((prev) => ({ ...prev, next: value }))}
+                      type="password"
+                    />
+                    <InputField
+                      label="Confirm Password"
+                      value={passwords.confirm}
+                      onChange={(value) => setPasswords((prev) => ({ ...prev, confirm: value }))}
+                      type="password"
+                    />
                   </div>
                 </div>
               </div>
             </>
           )}
-
-          <div className="flex justify-end border-t border-slate-100 px-5 py-4">
-            <button
-              onClick={handleSave}
-              disabled={saving}
-              className="flex items-center gap-2 rounded-2xl bg-gradient-to-r from-indigo-600 to-violet-500 px-5 py-3 text-[13px] font-semibold text-white shadow-[0_16px_30px_rgba(99,102,241,0.28)]"
-            >
-              {saving ? (
-                <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />
-              ) : saved ? (
-                <Check size={15} />
-              ) : (
-                <Save size={15} />
-              )}
-              {saved ? 'Saved' : saving ? 'Saving...' : 'Save Settings'}
-            </button>
-          </div>
         </div>
+      </div>
+
+      <div className="flex flex-col gap-3 sm:flex-row sm:justify-end">
+        <button
+          type="button"
+          onClick={handleSave}
+          disabled={saving}
+          className="inline-flex items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-fuchsia-500 via-violet-500 to-indigo-500 px-5 py-3 text-[13px] font-semibold text-white shadow-[0_18px_34px_rgba(99,102,241,0.26)] disabled:opacity-60"
+        >
+          {saving ? <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" /> : saved ? <Check size={15} /> : <Save size={15} />}
+          {saving ? 'Saving...' : saved ? 'Saved' : 'Save Settings'}
+        </button>
       </div>
     </div>
   );

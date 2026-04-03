@@ -3,6 +3,7 @@ import {
   FileCode2, Save, Eye, EyeOff, ArrowLeft, Sparkles, LayoutPanelTop,
   Upload, Code2, Wand2, FileText,
 } from 'lucide-react';
+import { portalApi } from '../lib/api';
 
 const EMPTY_TEMPLATE = { name: '', subject: '', content: '' };
 
@@ -129,17 +130,83 @@ function InsightCard({ icon: Icon, title, copy }) {
   );
 }
 
-export default function CreateTemplatePage({ templates, setTemplates, onNavigate, addToast, editingTemplate }) {
-  const isEdit = !!editingTemplate;
-  const [form, setForm] = useState(isEdit ? { ...editingTemplate } : EMPTY_TEMPLATE);
+function EditorLoading({ label }) {
+  return (
+    <div className="app-panel flex min-h-[50vh] items-center justify-center rounded-[32px]">
+      <div className="text-center">
+        <div className="mx-auto h-10 w-10 animate-spin rounded-full border-4 border-indigo-100 border-t-indigo-600" />
+        <p className="pt-4 text-[14px] font-medium text-slate-700">{label}</p>
+      </div>
+    </div>
+  );
+}
+
+export default function CreateTemplatePage({
+  token,
+  saveTemplate,
+  onNavigate,
+  addToast,
+  editingTemplateId,
+  initialEditingTemplate,
+}) {
+  const isEdit = !!editingTemplateId;
+  const [form, setForm] = useState(() => (initialEditingTemplate ? { ...initialEditingTemplate } : EMPTY_TEMPLATE));
   const [errors, setErrors] = useState({});
   const [showPreview, setShowPreview] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [loadingTemplate, setLoadingTemplate] = useState(isEdit);
+  const [loadError, setLoadError] = useState('');
 
   useEffect(() => {
-    setForm(isEdit ? { ...editingTemplate } : EMPTY_TEMPLATE);
+    let cancelled = false;
+
+    const loadTemplate = async () => {
+      if (!isEdit) {
+        setForm(EMPTY_TEMPLATE);
+        setLoadingTemplate(false);
+        setLoadError('');
+        return;
+      }
+
+      if (initialEditingTemplate) {
+        setForm({ ...initialEditingTemplate });
+      }
+
+      if (!token || !editingTemplateId) {
+        setLoadingTemplate(false);
+        setLoadError('Unable to load this template.');
+        return;
+      }
+
+      setLoadingTemplate(true);
+      setLoadError('');
+
+      try {
+        const template = await portalApi.getTemplate(token, editingTemplateId);
+        if (!cancelled) {
+          setForm({ ...template });
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setLoadError(error.message || 'Unable to load this template.');
+        }
+      } finally {
+        if (!cancelled) {
+          setLoadingTemplate(false);
+        }
+      }
+    };
+
+    loadTemplate();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [editingTemplateId, initialEditingTemplate, isEdit, token]);
+
+  useEffect(() => {
     setErrors({});
-  }, [editingTemplate, isEdit]);
+  }, [editingTemplateId, isEdit]);
 
   const validate = () => {
     const e = {};
@@ -149,7 +216,7 @@ export default function CreateTemplatePage({ templates, setTemplates, onNavigate
     return e;
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     const errs = validate();
     if (Object.keys(errs).length) {
@@ -158,20 +225,19 @@ export default function CreateTemplatePage({ templates, setTemplates, onNavigate
     }
 
     setSaving(true);
-    setTimeout(() => {
+    try {
+      const savedTemplate = await saveTemplate(form, editingTemplateId || null);
+      addToast(isEdit ? 'Template updated' : 'Template saved successfully', 'success');
+      setSaving(false);
       if (isEdit) {
-        setTemplates((prev) => prev.map((t) => (t.id === editingTemplate.id ? { ...form, id: editingTemplate.id } : t)));
-        addToast('Template updated', 'success');
-        setSaving(false);
         onNavigate('view-templates');
       } else {
-        const newTemplateId = Date.now();
-        setTemplates((prev) => [...prev, { ...form, id: newTemplateId, createdAt: new Date().toISOString().split('T')[0] }]);
-        addToast('Template saved successfully', 'success');
-        setSaving(false);
-        onNavigate('send-campaign', { templateId: newTemplateId, step: 2 });
+        onNavigate('send-campaign', { templateId: savedTemplate.id, step: 2 });
       }
-    }, 400);
+    } catch (error) {
+      setSaving(false);
+      addToast(error.message || 'Unable to save template.', 'error');
+    }
   };
 
   const setField = (key, val) => {
@@ -183,6 +249,28 @@ export default function CreateTemplatePage({ templates, setTemplates, onNavigate
     setField('content', html);
     addToast('HTML imported into editor', 'success');
   };
+
+  if (isEdit && loadingTemplate) {
+    return <EditorLoading label="Loading template..." />;
+  }
+
+  if (isEdit && loadError) {
+    return (
+      <div className="app-panel rounded-[32px] p-8 text-center">
+        <p className="text-[18px] font-semibold text-slate-900">Unable to load template</p>
+        <p className="pt-2 text-[14px] text-slate-500">{loadError}</p>
+        <div className="pt-5">
+          <button
+            type="button"
+            onClick={() => onNavigate('view-templates')}
+            className="rounded-2xl border border-slate-200/80 bg-white px-5 py-3 text-[13px] font-medium text-slate-600 hover:bg-slate-50"
+          >
+            Back to Templates
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-full space-y-5">

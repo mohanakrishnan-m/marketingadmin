@@ -35,7 +35,7 @@ function StepBadge({ step, currentStep }) {
   );
 }
 
-export default function SendCampaignPage({ clients, templates, setCampaigns, onNavigate, addToast }) {
+export default function SendCampaignPage({ clients, templates, sendCampaign, onNavigate, addToast }) {
   const location = useLocation();
   const [step, setStep] = useState(1);
   const [selectedTemplate, setSelectedTemplate] = useState('');
@@ -60,24 +60,21 @@ export default function SendCampaignPage({ clients, templates, setCampaigns, onN
     setSelectedClients(selectedClients.length === filteredClients.length ? [] : filteredClients.map((c) => c.id));
   };
 
-  const handleSend = () => {
+  const handleSend = async () => {
     setSending(true);
-    setTimeout(() => {
-      const newCampaign = {
-        id: Date.now(),
+    try {
+      await sendCampaign({
         name: campaignName.trim() || `Campaign - ${template?.name}`,
-        template: template?.name || '',
-        recipients: selectedClients.length,
-        sent: selectedClients.length,
-        opened: Math.floor(selectedClients.length * (0.5 + Math.random() * 0.35)),
-        status: 'Sent',
-        sentAt: new Date().toLocaleString('en-IN', { dateStyle: 'short', timeStyle: 'short' }),
-      };
-      setCampaigns((prev) => [...prev, newCampaign]);
+        templateId: template?.id,
+        clientIds: selectedClients,
+      });
       setSending(false);
       setSent(true);
       addToast(`Campaign sent to ${selectedClients.length} clients!`, 'success');
-    }, 1800);
+    } catch (error) {
+      setSending(false);
+      addToast(error.message || 'Unable to send campaign.', 'error');
+    }
   };
 
   useEffect(() => {

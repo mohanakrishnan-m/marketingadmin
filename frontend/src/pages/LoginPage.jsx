@@ -5,10 +5,14 @@ const technologiesLogo = new URL('../../logo/TECHNOLOGIES.svg', import.meta.url)
 export default function LoginPage({ onLogin }) {
   const [form, setForm] = useState({ email: 'admin@iceberg.io', password: 'admin123' });
   const [error, setError] = useState('');
+  const [submitting, setSubmitting] = useState(false);
 
-  const submit = (e) => {
+  const submit = async (e) => {
     e.preventDefault();
-    const result = onLogin(form);
+    setSubmitting(true);
+    setError('');
+    const result = await onLogin(form);
+    setSubmitting(false);
     if (result?.error) setError(result.error);
   };
 
@@ -74,9 +78,9 @@ export default function LoginPage({ onLogin }) {
 
             {error && <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-[13px] text-red-600">{error}</div>}
 
-            <button type="submit" className="flex w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-fuchsia-500 via-violet-500 to-indigo-500 px-5 py-3.5 text-[14px] font-semibold text-white shadow-[0_18px_34px_rgba(99,102,241,0.26)]">
-              Login
-              <ArrowRight size={16} />
+            <button type="submit" disabled={submitting} className="flex w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-fuchsia-500 via-violet-500 to-indigo-500 px-5 py-3.5 text-[14px] font-semibold text-white shadow-[0_18px_34px_rgba(99,102,241,0.26)] disabled:opacity-60">
+              {submitting ? 'Signing in...' : 'Login'}
+              {!submitting && <ArrowRight size={16} />}
             </button>
           </form>
         </div>

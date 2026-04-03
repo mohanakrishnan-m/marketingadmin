@@ -25,7 +25,7 @@ function getCategoryText(category) {
   return getCategoryList(category).join(', ');
 }
 
-export default function ClientsPage({ clients, setClients, onNavigate, addToast }) {
+export default function ClientsPage({ clients, deleteClient, onNavigate, addToast }) {
   const [search, setSearch] = useState('');
   const [sortKey, setSortKey] = useState('businessName');
   const [sortDir, setSortDir] = useState('asc');
@@ -55,10 +55,14 @@ export default function ClientsPage({ clients, setClients, onNavigate, addToast 
       return sortDir === 'asc' ? av.localeCompare(bv) : bv.localeCompare(av);
     });
 
-  const doDelete = () => {
-    setClients((prev) => prev.filter((c) => c.id !== deleteId));
-    addToast('Client deleted successfully', 'success');
-    setDeleteId(null);
+  const doDelete = async () => {
+    try {
+      await deleteClient(deleteId);
+      addToast('Client deleted successfully', 'success');
+      setDeleteId(null);
+    } catch (error) {
+      addToast(error.message || 'Unable to delete client.', 'error');
+    }
   };
 
   const SortIcon = ({ col }) => {

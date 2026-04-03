@@ -47,8 +47,8 @@ export default function Dashboard({ clients, templates, campaigns, onNavigate })
   const totalOpened = campaigns.filter((c) => c.status === 'Sent').reduce((s, c) => s + c.opened, 0);
   const openRate = totalSent > 0 ? ((totalOpened / totalSent) * 100).toFixed(1) : '0.0';
   const scheduled = campaigns.filter((c) => c.status === 'Scheduled').length;
-  const recentClients = [...clients].slice(-5).reverse();
-  const recentCampaigns = [...campaigns].slice(-5).reverse();
+  const recentClients = clients.slice(0, 5);
+  const recentCampaigns = campaigns.slice(0, 5);
 
   return (
     <div className="space-y-4 lg:space-y-6">

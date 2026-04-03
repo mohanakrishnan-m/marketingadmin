@@ -3,7 +3,8 @@ import {
   UserPlus, ArrowLeft, Save, Sparkles,
   Building2, Phone, Mail, Briefcase, User, Plus, X,
 } from 'lucide-react';
-import { CATEGORIES } from '../data/mockData';
+import { CATEGORIES } from '../data/constants';
+import { portalApi } from '../lib/api';
 
 const EMPTY = {
   businessName: '', contactName: '', whatsapp: '', email: '', category: '', customCategory: '', categories: [],
@@ -58,30 +59,101 @@ function InputField({
   );
 }
 
-export default function AddClientPage({ clients, setClients, onNavigate, addToast, editingClient }) {
-  const isEdit = !!editingClient;
-  const [form, setForm] = useState(isEdit ? { ...editingClient } : EMPTY);
+function normalizeClient(client) {
+  if (!client) return EMPTY;
+  const categories = Array.isArray(client.category)
+    ? client.category
+    : client.category
+      ? [client.category]
+      : [];
+
+  return {
+    ...EMPTY,
+    ...client,
+    category: '',
+    customCategory: '',
+    categories,
+  };
+}
+
+function EditorLoading({ label }) {
+  return (
+    <div className="app-panel flex min-h-[50vh] items-center justify-center rounded-[32px]">
+      <div className="text-center">
+        <div className="mx-auto h-10 w-10 animate-spin rounded-full border-4 border-indigo-100 border-t-indigo-600" />
+        <p className="pt-4 text-[14px] font-medium text-slate-700">{label}</p>
+      </div>
+    </div>
+  );
+}
+
+export default function AddClientPage({
+  token,
+  saveClient,
+  onNavigate,
+  addToast,
+  editingClientId,
+  initialEditingClient,
+}) {
+  const isEdit = !!editingClientId;
+  const [form, setForm] = useState(() => normalizeClient(initialEditingClient));
   const [errors, setErrors] = useState({});
   const [saving, setSaving] = useState(false);
+  const [loadingClient, setLoadingClient] = useState(isEdit);
+  const [loadError, setLoadError] = useState('');
 
   useEffect(() => {
-    if (isEdit && editingClient) {
-      const categoryList = Array.isArray(editingClient.category)
-        ? editingClient.category
-        : editingClient.category
-          ? [editingClient.category]
-          : [];
-      setForm({
-        ...editingClient,
-        category: '',
-        customCategory: '',
-        categories: categoryList,
-      });
-    } else {
-      setForm(EMPTY);
+    let cancelled = false;
+
+    const loadClient = async () => {
+      if (!isEdit) {
+        setForm(EMPTY);
+        setLoadingClient(false);
+        setLoadError('');
+        return;
+      }
+
+      if (initialEditingClient) {
+        setForm(normalizeClient(initialEditingClient));
+      }
+
+      if (!token || !editingClientId) {
+        setLoadingClient(false);
+        setLoadError('Unable to load this client.');
+        return;
+      }
+
+      setLoadingClient(true);
+      setLoadError('');
+
+      try {
+        const client = await portalApi.getClient(token, editingClientId);
+        if (!cancelled) {
+          setForm(normalizeClient(client));
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setLoadError(error.message || 'Unable to load this client.');
+        }
+      } finally {
+        if (!cancelled) {
+          setLoadingClient(false);
+        }
+      }
+    };
+
+    loadClient();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [editingClientId, initialEditingClient, isEdit, token]);
+
+  useEffect(() => {
+    if (!isEdit) {
+      setErrors({});
     }
-    setErrors({});
-  }, [editingClient, isEdit]);
+  }, [isEdit]);
 
   const validate = () => {
     const e = {};
@@ -109,7 +181,7 @@ export default function AddClientPage({ clients, setClients, onNavigate, addToas
     return e;
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     const errs = validate();
     if (Object.keys(errs).length) {
@@ -118,25 +190,23 @@ export default function AddClientPage({ clients, setClients, onNavigate, addToas
     }
 
     setSaving(true);
-    setTimeout(() => {
-      const payload = {
-        businessName: form.businessName,
-        contactName: form.contactName,
-        whatsapp: form.whatsapp,
-        email: form.email,
-        category: form.categories,
-      };
+    const payload = {
+      businessName: form.businessName,
+      contactName: form.contactName,
+      whatsapp: form.whatsapp,
+      email: form.email,
+      category: form.categories,
+    };
 
-      if (isEdit) {
-        setClients((prev) => prev.map((c) => (c.id === editingClient.id ? { ...payload, id: editingClient.id } : c)));
-        addToast('Client updated successfully', 'success');
-      } else {
-        setClients((prev) => [...prev, { ...payload, id: Date.now() }]);
-        addToast('Client added successfully', 'success');
-      }
+    try {
+      await saveClient(payload, editingClientId || null);
+      addToast(isEdit ? 'Client updated successfully' : 'Client added successfully', 'success');
       setSaving(false);
       onNavigate('all-clients');
-    }, 400);
+    } catch (error) {
+      setSaving(false);
+      addToast(error.message || 'Unable to save client.', 'error');
+    }
   };
 
   const updateField = (key, sanitizer) => (e) => {
@@ -181,6 +251,28 @@ export default function AddClientPage({ clients, setClients, onNavigate, addToas
     }));
     setErrors((prev) => ({ ...prev, category: '' }));
   };
+
+  if (isEdit && loadingClient) {
+    return <EditorLoading label="Loading client details..." />;
+  }
+
+  if (isEdit && loadError) {
+    return (
+      <div className="app-panel rounded-[32px] p-8 text-center">
+        <p className="text-[18px] font-semibold text-slate-900">Unable to load client</p>
+        <p className="pt-2 text-[14px] text-slate-500">{loadError}</p>
+        <div className="pt-5">
+          <button
+            type="button"
+            onClick={() => onNavigate('all-clients')}
+            className="rounded-2xl border border-slate-200/80 bg-white px-5 py-3 text-[13px] font-medium text-slate-600 hover:bg-slate-50"
+          >
+            Back to Clients
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="mx-auto max-w-6xl">
