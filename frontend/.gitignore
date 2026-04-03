@@ -25,3 +25,8 @@ Thumbs.db
 
 # Vite cache
 .vite/
+
+.env.backup
+.env.production
+.env.dev
+.env.prod
